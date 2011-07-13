@@ -603,6 +603,23 @@ void print_filename(char *pathname, struct inode *inode)
 		t->tm_mday, t->tm_hour, t->tm_min, pathname);
 	if((inode->mode & S_IFMT) == S_IFLNK)
 		printf(" -> %s", inode->symlink);
+
+	unsigned int count;
+	struct xattr_list *xattr_list;
+	int i, failed;
+
+	if (inode->xattr != SQUASHFS_INVALID_XATTR) {
+		xattr_list = get_xattr(inode->xattr, &count, &failed);
+
+		if (xattr_list != NULL && failed == FALSE) {
+			printf( " xattrs:");
+			for(i = 0; i < count; i++) {
+				printf(" %s/%s", xattr_list[i].full_name,
+						(char*)xattr_list[i].value);
+			}
+		}
+	}
+
 	printf("\n");
 }
 	
