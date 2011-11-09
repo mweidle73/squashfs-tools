@@ -28,10 +28,15 @@
 #include "squashfs_swap.h"
 #include "compressor.h"
 #include "xattr.h"
+#include "xattr_capabilities.h"
 #include "unsquashfs_info.h"
 #include "stdarg.h"
 #include "fnmatch_compat.h"
 
+#include <stdint.h>
+
+#include <linux/capability.h>
+#include <linux/xattr.h>
 #include <sys/sysinfo.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
@@ -39,6 +44,16 @@
 #include <sys/resource.h>
 #include <limits.h>
 #include <ctype.h>
+
+#ifndef XATTR_SECURITY_PREFIX
+#define XATTR_SECURITY_PREFIX "security."
+#endif
+
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define FIXUP_32BITS(x) bswap_32(x)
+#else
+#define FIXUP_32BITS(x) (x)
+#endif
 
 struct cache *fragment_cache, *data_cache;
 struct queue *to_reader, *to_inflate, *to_writer, *from_writer;
@@ -528,6 +543,52 @@ char *modestr(char *str, int mode)
 	return str;
 }
 
+void print_cap_names(struct vfs_cap_data *vfscap)
+{
+	struct vfs_cap_data tmp;
+
+	short int is_effective;
+	uint32_t cap_revision;
+
+	short int i;
+
+	tmp.magic_etc = FIXUP_32BITS(vfscap->magic_etc);
+	for (i = 0; i < VFS_CAP_U32; i++) {
+		tmp.data[i].permitted =
+			FIXUP_32BITS(vfscap->data[i].permitted);
+		tmp.data[i].inheritable =
+			FIXUP_32BITS(vfscap->data[i].inheritable);
+	}
+
+	cap_revision = (tmp.magic_etc & VFS_CAP_REVISION_MASK);
+	if (VFS_CAP_REVISION_2 != cap_revision) {
+		/* VFS_CAP_REVISION_2 exists since 2.6.25
+		 * xattrs were introduced with 2.6.38
+		 * ... no need to support older revisions */
+		printf("(unsupported revision)");
+		return;
+	}
+
+	is_effective = (tmp.magic_etc & VFS_CAP_FLAGS_EFFECTIVE);
+
+	for (i = 0; i <= CAP_LAST_CAP; i++) {
+		short int idx = CAP_TO_INDEX(i);
+		uint32_t mask = CAP_TO_MASK(i);
+
+		short int is_permitted =
+			((tmp.data[idx].permitted & mask) >> i);
+		short int is_inheritable =
+			((tmp.data[idx].inheritable & mask) >> i);
+
+		if (is_permitted || is_inheritable) {
+			printf("%s+%s%s%s ",
+				cap_names[i],
+				is_effective ? "e" : "",
+				is_permitted ? "p" : "",
+				is_inheritable ? "i" : "");
+		}
+	}
+}
 
 #define TOTALCHARS  25
 void print_filename(char *pathname, struct inode *inode)
@@ -614,8 +675,12 @@ void print_filename(char *pathname, struct inode *inode)
 		if (xattr_list != NULL && failed == FALSE) {
 			printf( " xattrs:");
 			for(i = 0; i < count; i++) {
-				printf(" %s/%s", xattr_list[i].full_name,
-						(char*)xattr_list[i].value);
+				printf(" %s/", xattr_list[i].full_name);
+				if (strcmp(XATTR_NAME_CAPS, xattr_list[i].full_name) == 0) {
+					print_cap_names((struct vfs_cap_data *)xattr_list[i].value);
+				} else {
+					printf("%s", (char*)xattr_list[i].value);
+				}
 			}
 		}
 	}
