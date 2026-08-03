@@ -37,7 +37,7 @@ jobs:
           git merge-base --is-ancestor origin/abuild HEAD
           unexpected=$(
             git diff --name-only origin/abuild...HEAD |
-              grep -Ev '^\.github/' || true
+              grep -Ev '^(\.github/|README\.md$)' || true
           )
           if test -n "$unexpected"; then
             echo "abuild-gh contains changes outside .github/:" >&2

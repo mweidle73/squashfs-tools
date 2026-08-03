@@ -3,6 +3,8 @@
 This repository retains the historical SquashFS reader used by Abuild.
 The upstream project is maintained at
 <https://github.com/plougher/squashfs-tools>.
+The original SquashFS tools 4.5 release documentation remains available in
+the repository's [upstream README](README).
 
 The branches have deliberately separate roles:
 
