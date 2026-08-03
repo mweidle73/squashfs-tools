@@ -37,3 +37,8 @@ containing both an ordinary user xattr and `security.capability`.  The test
 container then runs without network access, Linux capabilities or root and
 checks both human-readable presentations plus ordinary extraction.  This
 executes the behavior introduced by both secunet commits.
+
+The weekly upstream monitor compares both `master` and every official
+versioned release-tag ref. Missing, additional or moved release tags fail the
+workflow for manual review; non-release tags such as vulnerability markers
+are deliberately excluded, and the workflow never updates tags automatically.
