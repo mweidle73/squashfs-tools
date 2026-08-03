@@ -1,0 +1,32 @@
+#!/bin/sh
+
+set -eu
+
+WORK_DIR=$(mktemp -d)
+
+cleanup()
+{
+    rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT HUP INT TERM
+
+echo "ci: checking the patched unsquashfs version"
+/opt/squashfs-tools/unsquashfs -version | grep -F 'version 4.5'
+
+echo "ci: checking ordinary extended-attribute presentation"
+/opt/squashfs-tools/unsquashfs \
+    -lln -p 1 /fixture/capabilities.squashfs > "$WORK_DIR/listing"
+grep -F 'user.abuild-marker/preserved' "$WORK_DIR/listing"
+
+echo "ci: checking POSIX capability presentation"
+grep -F 'security.capability/' "$WORK_DIR/listing"
+grep -F 'net_bind_service+ep' "$WORK_DIR/listing"
+grep -F 'sys_chroot+ep' "$WORK_DIR/listing"
+
+echo "ci: checking extraction with unprivileged xattr handling"
+/opt/squashfs-tools/unsquashfs \
+    -no-xattrs -d "$WORK_DIR/extracted" \
+    /fixture/capabilities.squashfs > /dev/null
+test "$(cat "$WORK_DIR/extracted/payload")" = 'capability fixture'
+
+echo "ci: all Abuild fork checks passed"

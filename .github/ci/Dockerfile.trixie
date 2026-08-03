@@ -1,0 +1,41 @@
+FROM debian:trixie
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    attr \
+    gcc \
+    libcap2-bin \
+    make \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . /source
+
+RUN make -C /source/squashfs-tools -j8 \
+    && install -d /opt/squashfs-tools \
+    && install -m 755 \
+        /source/squashfs-tools/mksquashfs \
+        /source/squashfs-tools/unsquashfs \
+        /opt/squashfs-tools/
+
+# Creating a security.capability xattr requires CAP_SETFCAP.  Generate the
+# immutable fixture while the image is built as root; the actual regression
+# check later runs in the hardened non-root container.
+RUN install -d /fixture/source \
+    && printf 'capability fixture\n' > /fixture/source/payload \
+    && setfattr -n user.abuild-marker \
+        -v 0x70726573657276656400 /fixture/source/payload \
+    && setcap cap_net_bind_service,cap_sys_chroot=ep /fixture/source/payload \
+    && getfattr -n user.abuild-marker -e hex \
+        /fixture/source/payload | \
+        grep -Fx 'user.abuild-marker=0x70726573657276656400' \
+    && getcap /fixture/source/payload | \
+        grep -F 'cap_net_bind_service,cap_sys_chroot=ep' \
+    && /opt/squashfs-tools/mksquashfs \
+        /fixture/source /fixture/capabilities.squashfs \
+        -noappend -no-progress
+
+WORKDIR /work
+
+CMD ["/bin/sh"]
